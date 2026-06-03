@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin - Helpdesk IT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style> 
+        body { background-color: #f4f7f6; padding-top: 30px; padding-bottom: 50px; } 
+        .card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); } 
+        #loginScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #e9ecef; display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .keluhan-text { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .box-penanganan { cursor: pointer; color: #0d6efd; font-size: 0.85em; background-color: #f8f9fa; border-radius: 5px; padding: 8px; border: 1px dashed #0d6efd; transition: 0.2s; }
+        .box-penanganan:hover { background-color: #e9ecef; color: #0a58ca; }
+        .status-menunggu { background-color: #f8d7da !important; color: #842029; }
+        .status-diproses { background-color: #fff3cd !important; color: #664d03; }
+        .status-selesai { background-color: #d1e7dd !important; color: #0f5132; }
+
+        /* Menyembunyikan tombol/input saat dicetak ke PDF/Kertas */
+        @media print {
+            body { background-color: white; padding: 0; }
+            .no-print { display: none !important; }
+            .card { border: none; box-shadow: none; padding: 0 !important; }
+            .table { border: 1px solid #000; font-size: 12px; }
+            th, td { border: 1px solid #000 !important; }
+            .box-penanganan { border: none !important; }
+            select { border: none; appearance: none; background: transparent; font-weight: bold; color: black !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="loginScreen">
+    <div class="card p-4 shadow-sm" style="width: 100%; max-width: 400px;">
+        <h3 class="text-center mb-4">🔒 Login Teknisi</h3>
+        <div class="mb-3">
+            <label class="form-label">Password Admin</label>
+            <input type="password" class="form-control" id="passwordInput" placeholder="Masukkan password...">
+        </div>
+        <button onclick="cekPassword()" id="btnLogin" class="btn btn-primary w-100">Masuk</button>
+        <div id="loginError" class="text-danger mt-2 text-center d-none"><small>Password Salah!</small></div>
+    </div>
+</div>
+
+<div class="container-fluid px-4 d-none" id="dashboardScreen">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 no-print">
+        <h2 class="text-dark">🛠️ Dashboard Teknisi</h2>
+        <div class="d-flex gap-2">
+            <input type="month" id="filterBulan" class="form-control" onchange="filterTabelBulan()">
+            <button onclick="window.print()" class="btn btn-success fw-bold">🖨️ Cetak Rekap</button>
+            <button onclick="muatDataLaporan()" class="btn btn-outline-primary">🔄 Refresh</button>
+            <button onclick="logoutAdmin()" class="btn btn-danger">Logout</button>
+        </div>
+    </div>
+    
+    <div class="card p-4" id="areaCetak">
+        <h4 class="mb-3 d-none d-print-block text-center">Rekap Laporan Pemeliharaan Ruang LAB</h4> 
+        <h5 class="mb-3 no-print">Daftar Laporan Masuk</h5>
+        
+        <div id="loadingText" class="text-center my-4 no-print">
+            <div class="spinner-border text-primary" role="status"></div><p class="mt-2">Mengambil data...</p>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-striped align-middle d-none" id="tabelLaporan">
+                <thead class="table-dark">
+                    <tr>
+                        <th>No. Tiket</th> 
+                        <th>Waktu</th>
+                        <th>Pelapor</th>
+                        <th>Ruangan & Aset</th>
+                        <th class="no-print">Prioritas</th>
+                        <th>Kendala / Kerusakan</th>
+                        <th>Penanganan Teknisi</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="isiTabel"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade no-print" id="modalPenanganan" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title">📝 Catat Penanganan IT</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="modalRow">
+          <div class="mb-3"><label class="form-label fw-bold">Tgl Perbaikan</label><input type="date" class="form-control" id="modalTgl"></div>
+          <div class="mb-3"><label class="form-label fw-bold">Diagnosis</label><textarea class="form-control" id="modalDiagnosis" rows="2"></textarea></div>
+          <div class="mb-3"><label class="form-label fw-bold">Tindakan & Solusi</label><textarea class="form-control" id="modalSolusi" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="button" class="btn btn-primary" onclick="simpanPenanganan()">Simpan Data</button>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+    // Link Web App Google Script sudah diterapkan di sini
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbxRKGaisslBvEKLYMcBZpnk5XkXNuMIQj8LM0dHKCszI_lqgSIv7xaa-x1I4YuDKxIB/exec';
+
+    document.addEventListener("DOMContentLoaded", function() {
+        if (localStorage.getItem("admin_token")) {
+            document.getElementById('loginScreen').classList.add('d-none');
+            document.getElementById('dashboardScreen').classList.remove('d-none');
+            muatDataLaporan();
+        }
+    });
+
+    function cekPassword() {
+        const pass = document.getElementById('passwordInput').value;
+        document.getElementById('btnLogin').innerText = "Mengecek...";
+        
+        fetch(scriptURL + "?action=getReports&pass=" + pass)
+            .then(res => res.json())
+            .then(data => {
+                if(data.error) {
+                    document.getElementById('loginError').classList.remove('d-none');
+                    document.getElementById('btnLogin').innerText = "Masuk";
+                } else {
+                    localStorage.setItem("admin_token", pass);
+                    document.getElementById('loginScreen').classList.add('d-none');
+                    document.getElementById('dashboardScreen').classList.remove('d-none');
+                    renderTabel(data); 
+                }
+            }).catch(err => alert("Koneksi gagal"));
+    }
+
+    function logoutAdmin() { localStorage.removeItem("admin_token"); location.reload(); }
+    document.getElementById("passwordInput").addEventListener("keypress", function(e) { if(e.key === "Enter") { e.preventDefault(); cekPassword(); } });
+
+    function getStatusClass(status) { return status === 'Selesai' ? 'status-selesai' : (status === 'Diproses' ? 'status-diproses' : 'status-menunggu'); }
+
+    function muatDataLaporan() {
+        const pass = localStorage.getItem("admin_token");
+        document.getElementById('tabelLaporan').classList.add('d-none');
+        document.getElementById('loadingText').classList.remove('d-none');
+        
+        fetch(scriptURL + "?action=getReports&pass=" + pass)
+            .then(res => res.json())
+            .then(data => {
+                if(data.error) { logoutAdmin(); return; } 
+                renderTabel(data);
+            }).catch(err => alert("Gagal mengambil data"));
+    }
+
+    function renderTabel(data) {
+        document.getElementById('loadingText').classList.add('d-none');
+        document.getElementById('tabelLaporan').classList.remove('d-none');
+        const tbody = document.getElementById('isiTabel');
+        tbody.innerHTML = '';
+        
+        if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4">Kosong</td></tr>'; return; }
+        
+        data.forEach(item => {
+            let bgPrioritas = item.prioritas === 'Sedang' ? 'bg-warning text-dark' : (item.prioritas === 'Tinggi' ? 'bg-danger' : 'bg-info text-dark');
+            let statusDropdown = `<select class="form-select form-select-sm fw-bold ${getStatusClass(item.status)}" data-row="${item.row}" style="width: 110px; border:none;" onchange="updateStatus(this)">
+                ${['Menunggu', 'Diproses', 'Selesai'].map(o => `<option value="${o}" ${item.status === o ? 'selected' : ''}>${o}</option>`).join('')}
+            </select>`;
+
+            let tampilanPenanganan = `<button class="btn btn-sm btn-outline-primary no-print" onclick="bukaModalPenanganan('${item.row}', encodeURIComponent('${item.tglPerbaikan || ''}'), encodeURIComponent('${item.diagnosis || ''}'), encodeURIComponent('${item.solusi || ''}'))">+ Catat Penanganan</button>`;
+            
+            if(item.tglPerbaikan || item.diagnosis || item.solusi) {
+                tampilanPenanganan = `<div class="box-penanganan text-start" title="Klik untuk edit" onclick="bukaModalPenanganan('${item.row}', encodeURIComponent('${item.tglPerbaikan}'), encodeURIComponent('${item.diagnosis}'), encodeURIComponent('${item.solusi}'))">
+                    <div style="font-size: 0.85rem;"><strong>Tgl:</strong> ${item.tglPerbaikan || '-'}</div>
+                    <div style="font-size: 0.85rem;"><strong>Diag:</strong> ${item.diagnosis || '-'}</div>
+                    <div style="font-size: 0.85rem;"><strong>Sol:</strong> ${item.solusi || '-'}</div>
+                </div>`;
+            }
+
+            let bagianBulan = item.tanggal.split('/')[1] || "";
+            let bagianTahun = item.tanggal.split('/')[2] || "";
+
+            const tr = document.createElement('tr');
+            tr.setAttribute("data-bulan", `${bagianTahun}-${bagianBulan}`); 
+            tr.innerHTML = `
+                <td><span class="badge bg-primary">${item.id_tiket || '-'}</span></td>
+                <td>${item.tanggal}<br><small class="text-muted">${item.jam}</small></td>
+                <td><strong>${item.nama}</strong></td>
+                <td>${item.ruangan}<br><span class="badge bg-secondary no-print">PC: ${item.no_pc || '-'}</span><small class="d-none d-print-block">PC: ${item.no_pc || '-'}</small></td>
+                <td class="no-print"><span class="badge ${bgPrioritas}">${item.prioritas}</span></td>
+                <td class="keluhan-text" title="${item.deskripsi}">${item.deskripsi}</td>
+                <td style="min-width: 250px;">${tampilanPenanganan}</td>
+                <td>${statusDropdown}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function filterTabelBulan() {
+        const inputBulan = document.getElementById('filterBulan').value; 
+        const semuaBaris = document.querySelectorAll('#isiTabel tr');
+        
+        semuaBaris.forEach(baris => {
+            const tglBaris = baris.getAttribute('data-bulan');
+            if (inputBulan === "" || tglBaris === inputBulan) {
+                baris.style.display = ""; 
+            } else {
+                baris.style.display = "none"; 
+            }
+        });
+    }
+
+    function updateStatus(selectElement) {
+        const row = selectElement.getAttribute('data-row');
+        const statusBaru = selectElement.value;
+        selectElement.className = `form-select form-select-sm fw-bold ${getStatusClass(statusBaru)}`;
+        
+        const formData = new FormData(); formData.append('action', 'updateStatus'); formData.append('row', row); formData.append('status', statusBaru);
+        fetch(scriptURL, { method: 'POST', body: formData });
+    }
+
+    let modalPenanganan;
+    function bukaModalPenanganan(row, tgl, diag, sol) {
+        document.getElementById('modalRow').value = row;
+        document.getElementById('modalTgl').value = (decodeURIComponent(tgl) !== 'undefined' && decodeURIComponent(tgl) !== 'null') ? decodeURIComponent(tgl) : '';
+        document.getElementById('modalDiagnosis').value = (decodeURIComponent(diag) !== 'undefined' && decodeURIComponent(diag) !== 'null') ? decodeURIComponent(diag) : '';
+        document.getElementById('modalSolusi').value = (decodeURIComponent(sol) !== 'undefined' && decodeURIComponent(sol) !== 'null') ? decodeURIComponent(sol) : '';
+        if(!modalPenanganan) { modalPenanganan = new bootstrap.Modal(document.getElementById('modalPenanganan')); }
+        modalPenanganan.show();
+    }
+
+    function simpanPenanganan() {
+        const formData = new FormData(); formData.append('action', 'updatePenanganan'); 
+        formData.append('row', document.getElementById('modalRow').value); 
+        formData.append('tglPerbaikan', document.getElementById('modalTgl').value);
+        formData.append('diagnosis', document.getElementById('modalDiagnosis').value);
+        formData.append('solusi', document.getElementById('modalSolusi').value);
+
+        modalPenanganan.hide();
+        document.querySelector('#loadingText p').innerText = "Menyimpan..."; document.getElementById('tabelLaporan').classList.add('d-none'); document.getElementById('loadingText').classList.remove('d-none');
+        fetch(scriptURL, { method: 'POST', body: formData }).then(() => muatDataLaporan());
+    }
+</script>
+</body>
+</html>
